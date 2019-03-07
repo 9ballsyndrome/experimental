@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="google" content="notranslate"/>
+  <title>WebGLSharedMemoryTest</title>
+  <script type="text/javascript">
+    const main = () => {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl2-compute');
+      if (!gl) {
+        alert("Can't get WebGL2 compute");
+        return;
+      }
+
+      const numThreadsPerGroup = 512;
+      const numGroups = 1;
+      const numTotalThreads = numThreadsPerGroup * numGroups;
+
+      // language=GLSL
+      const shaderSource = `#version 310 es
+        #define NUM_THREADS ${numThreadsPerGroup}u
+        layout (local_size_x = NUM_THREADS, local_size_y = 1, local_size_z = 1) in;
+        layout (std430, binding = 0) writeonly buffer ssbo {
+          float result[];
+        };
+        shared float smem[NUM_THREADS];
+        void main() {
+          smem[gl_LocalInvocationID.x] = float(gl_LocalInvocationID.x);
+          memoryBarrierShared();
+          barrier();
+
+          float sum = 0.0;
+          for (uint i=0u; i<NUM_THREADS; i++) {
+            sum += smem[i];
+          }
+          result[gl_GlobalInvocationID.x] = sum;
+        }
+      `;
+
+      const shader = gl.createShader(gl.COMPUTE_SHADER);
+      gl.shaderSource(shader, shaderSource);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.log(gl.getShaderInfoLog(shader));
+        return;
+      }
+
+      const ext = gl.getExtension('WEBGL_debug_shaders');
+      console.log(ext.getTranslatedShaderSource(shader));
+
+      const program = gl.createProgram();
+      gl.attachShader(program, shader);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        console.log(gl.getProgramInfoLog(program));
+        return;
+      }
+
+      gl.useProgram(program);
+      const output = new Float32Array(numTotalThreads);
+
+      const ssbo = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssbo);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, output, gl.STATIC_DRAW);
+      gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, ssbo);
+      gl.memoryBarrier(gl.SHADER_STORAGE_BARRIER_BIT);
+
+      gl.dispatchCompute(numGroups, 1, 1);
+      gl.memoryBarrier(gl.SHADER_STORAGE_BARRIER_BIT);
+
+      const result = new Float32Array(numTotalThreads);
+      gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, result);
+
+      console.log('complete compute');
+      console.log(result);
+      const correctResult = (numThreadsPerGroup - 1) * numThreadsPerGroup / 2;
+      for (let i = 0; i < numTotalThreads; i++) {
+        if (result[i] !== correctResult) {
+          console.log('check error: ', i, result[i]);
+        }
+      }
+      console.log('complete check errors');
+    };
+
+    window.addEventListener('DOMContentLoaded', () => main());
+  </script>
+</head>
+<body>
+<p>See console</p>
+</body>
+</html>

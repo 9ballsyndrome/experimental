@@ -1,0 +1,67 @@
+﻿#pragma kernel main
+
+// INITIAL HLSL BEGIN
+
+float float_ctor(uint x0)
+{
+    return float(x0);
+}
+// Shader Storage Blocks
+
+RWByteAddressBuffer _ssbo: register(u0);
+void _Store_float_std430_cm_x(RWByteAddressBuffer buffer, uint loc, float value)
+{
+    buffer.Store(loc + 0, asuint(value));
+}
+
+#ifdef ANGLE_ENABLE_LOOP_FLATTEN
+#define LOOP [loop]
+#define FLATTEN [flatten]
+#else
+#define LOOP
+#define FLATTEN
+#endif
+
+#define ATOMIC_COUNTER_ARRAY_STRIDE 4
+
+static uint _ANGLE_ZEROS_[256];
+
+cbuffer DriverConstants : register(b1)
+{
+};
+// @@ IMAGE2D DECLARATION FUNCTION STRING @@
+static uint3 gl_LocalInvocationID = uint3(0, 0, 0);
+static uint3 gl_GlobalInvocationID = uint3(0, 0, 0);
+
+struct CS_INPUT
+{
+    uint3 dx_LocalInvocationID : SV_GroupThreadID;
+    uint3 dx_GlobalInvocationID : SV_DispatchThreadID;
+};
+
+
+void initGLBuiltins(CS_INPUT input)
+{
+    gl_LocalInvocationID = input.dx_LocalInvocationID;
+    gl_GlobalInvocationID = input.dx_GlobalInvocationID;
+};
+
+// If groupshared is declared without zero-value initialize, it works always well.
+// groupshared float _smem[512];
+groupshared float _smem[512] = {_ANGLE_ZEROS_, _ANGLE_ZEROS_};
+[numthreads(512, 1, 1)]
+void main(CS_INPUT input){
+initGLBuiltins(input);
+(_smem[gl_LocalInvocationID.x] = float_ctor(gl_LocalInvocationID.x));
+GroupMemoryBarrier();
+GroupMemoryBarrierWithGroupSync();
+float _sum1032 = {0.0};
+{ for(uint _i1033 = {0}; (_i1033 < 512); (_i1033++))
+{
+(_sum1032 += _smem[_i1033]);
+}
+}
+_Store_float_std430_cm_x(_ssbo, 0 + 4 * gl_GlobalInvocationID.x, _sum1032);
+}
+
+// INITIAL HLSL END
