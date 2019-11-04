@@ -118,6 +118,9 @@ const script = async () => {
   const render = () => {
     context.clear(context.COLOR_BUFFER_BIT);
 
+    context.bindImageTexture(0, frameTexture, 0, false, 0, context.READ_WRITE, context.RGBA8);
+    context.bindImageTexture(1, accumulatedTexture, 0, false, 0, context.READ_WRITE, context.RGBA8);
+
     context.useProgram(computeProgram1);
     context.uniform2f(pointLocation, mouseX, mouseY);
     context.dispatchCompute(CANVAS_WIDTH / 16, CANVAS_HEIGHT / 16, 1);
